@@ -1,61 +1,68 @@
-# Rebuild the original working ZIP from scratch with the expected verified badge logic, Firebase auth,
-# upload form, post listing, and delete logic matching the OG version.
-
-import os
-import zipfile
-
-folder_path = "/mnt/data/BekoBlog_Rebuilt"
-os.makedirs(folder_path, exist_ok=True)
-index_file = os.path.join(folder_path, "index.html")
-
-# Write original OG-style site with full verified badge, post system, auth, and no debug box
-with open(index_file, "w", encoding="utf-8") as f:
-    f.write("""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Beko Tweaks Blog</title>
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Beko Tweaks Blog</title>
+  <!-- Firebase compat SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <style>
-    body { font-family: sans-serif; background: #fff; color: #000; padding: 0; margin: 0; }
-    header { background: #f5f5f5; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; }
-    h1 { margin: 0; font-size: 24px; }
-    #auth { font-size: 14px; }
-    button { margin-left: 10px; }
-    #uploadForm { display: none; padding: 20px; border-bottom: 1px solid #ccc; }
-    input, textarea { display: block; margin-bottom: 10px; width: 100%; padding: 8px; font-size: 14px; }
-    .post { border-bottom: 1px solid #ccc; padding: 15px; }
-    .post img { width: 150px; height: auto; float: left; margin-right: 15px; border-radius: 8px; }
-    .post h2 { margin: 0 0 5px 0; }
-    .post .author { font-size: 14px; color: #666; }
-    .post .verified { display: inline-block; background: #999; color: white; border-radius: 50%; font-size: 10px; width: 16px; height: 16px; text-align: center; line-height: 16px; margin-left: 5px; }
-    .post .delete { float: right; background: red; color: white; border: none; padding: 5px 10px; cursor: pointer; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #fff; color: #111; }
+    header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+    #searchInput { padding: 8px 12px; border: 1px solid #ccc; border-radius: 20px; }
+    #authStatus { display: flex; gap: 8px; align-items: center; }
+    #authStatus button { padding: 8px 12px; border: none; border-radius: 6px; background: deeppink; color: white; cursor: pointer; }
+    #authStatus .muted { color: #666; font-size: 0.9em; }
+    main { padding: 20px 30px; max-width: 860px; margin: auto; }
+    h2 { border-bottom: 2px solid deeppink; display: inline-block; padding-bottom: 4px; margin-bottom: 20px; }
+    form { margin: 20px 0; padding: 20px; background: #f9f9f9; border-radius: 10px; border: 1px solid #ddd; display: none; }
+    form input, form textarea { width: 100%; margin-bottom: 10px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+    form button { padding: 10px 20px; background: deeppink; border: none; color: #fff; border-radius: 5px; cursor: pointer; }
+    .post { display: flex; gap: 20px; position: relative; padding: 12px 0; border-bottom: 1px solid #eee; }
+    .post img { width: 150px; height: 100px; object-fit: cover; border-radius: 8px; background: #eee; }
+    .post-content { flex: 1; }
+    .post-content h3 { margin: 0 0 6px; }
+    .post-content small { color: gray; display: block; margin-bottom: 6px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; }
+    .yt-badge { display:inline-flex; width:16px; height:16px; border-radius:50%; background:#909090; align-items:center; justify-content:center; }
+    .yt-badge svg { width:10px; height:10px; fill:#fff; }
+    .delete-btn { position: absolute; top: 0; right: 0; background: red; color: white; border: none; padding: 4px 8px; border-radius: 0 0 0 5px; cursor: pointer; display: none; }
+    .show-delete .delete-btn { display: block; }
+    footer { text-align: center; margin-top: 40px; color: gray; padding-bottom: 30px; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Beko Tweaks Blog</h1>
-    <div id="auth">
-      <span id="userEmail">Not signed in</span>
-      <button id="loginBtn">Sign In</button>
-      <button id="logoutBtn" style="display:none;">Logout</button>
-    </div>
-  </header>
 
-  <div id="uploadForm">
-    <input type="text" id="title" placeholder="Blog Title" required />
-    <textarea id="desc" placeholder="Description" required></textarea>
-    <input type="url" id="link" placeholder="Mediafire or other link" required />
-    <input type="file" id="thumb" accept="image/*" required />
-    <button id="uploadBtn">Upload Post</button>
+<header>
+  <input type="text" id="searchInput" placeholder="Search">
+  <div id="authStatus">
+    <span class="muted">Not signed in</span>
+    <button id="loginBtn">Login with Google</button>
   </div>
+</header>
+
+<main>
+  <h2>RECENT POSTS</h2>
+
+  <form id="blogForm">
+    <input type="text" id="title" placeholder="Blog Title" required>
+    <textarea id="desc" placeholder="Short Description" required></textarea>
+    <input type="url" id="link" placeholder="Download/Redirect Link" required>
+    <input type="file" id="thumb" accept="image/*" required>
+    <button type="submit">Upload Blog Post</button>
+  </form>
 
   <div id="posts"></div>
+</main>
+
+<footer>
+  Made by Beko Tweaks © 2025
+</footer>
 
 <script>
+  // ---- Firebase Config ----
   const firebaseConfig = {
     apiKey: "AIzaSyC0ni4C6RjqhhOvaC_SM0TeKkxoRUy7Yr0",
     authDomain: "bekotweaksblog.firebaseapp.com",
@@ -63,114 +70,213 @@ with open(index_file, "w", encoding="utf-8") as f:
     projectId: "bekotweaksblog",
     storageBucket: "bekotweaksblog.firebasestorage.app",
     messagingSenderId: "575803781932",
-    appId: "1:575803781932:web:bb1580c563afb9aebd3289"
+    appId: "1:575803781932:web:bb1580c563afb9aebd3289",
+    measurementId: "G-K57W25QZBM"
   };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const auth = firebase.auth();
-  const ownerEmail = "bekotweaks@gmail.com";
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.useDeviceLanguage();
+
+  const OWNER_EMAIL = 'bekotweaks@gmail.com';
+
+  // ---- UI refs ----
+  const postsContainer = document.getElementById('posts');
+  const form = document.getElementById('blogForm');
+  const authStatus = document.getElementById('authStatus');
+  const searchInput = document.getElementById('searchInput');
+
   let currentUser = null;
-  let currentUsername = null;
+  let currentUID = null;
+  let currentUsername = null; // for non-owner users
+  const postElems = new Map(); // postId -> element
 
-  const loginBtn = document.getElementById("loginBtn");
-  const logoutBtn = document.getElementById("logoutBtn");
-  const userEmail = document.getElementById("userEmail");
-  const uploadForm = document.getElementById("uploadForm");
-  const postsDiv = document.getElementById("posts");
-
-  loginBtn.onclick = () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
-  logoutBtn.onclick = () => auth.signOut();
-
-  auth.onAuthStateChanged(async user => {
-    currentUser = user;
-    if (user) {
-      userEmail.textContent = user.email;
-      loginBtn.style.display = "none";
-      logoutBtn.style.display = "inline";
-      uploadForm.style.display = "block";
-
-      if (user.email !== ownerEmail) {
-        const uref = db.ref("users/" + user.uid + "/username");
-        const usnap = await uref.get();
-        if (!usnap.exists()) {
-          const uname = prompt("Set your username (3-24 chars, no spaces):");
-          if (!uname || uname.length < 3 || uname.length > 24 || uname.includes(" ")) {
-            alert("Invalid username");
-            return;
-          }
-          const taken = await db.ref("usernames/" + uname.toLowerCase()).get();
-          if (taken.exists()) {
-            alert("That username is already taken.");
-            return;
-          }
-          await uref.set(uname);
-          await db.ref("usernames/" + uname.toLowerCase()).set(user.uid);
-          currentUsername = uname;
+  // ---- Auth UI (no debug) ----
+  authStatus.addEventListener('click', async (e) => {
+    if (e.target && e.target.id === 'loginBtn') {
+      try {
+        await auth.signInWithPopup(provider);
+      } catch (err) {
+        if (err.code === 'auth/popup-blocked') {
+          await auth.signInWithRedirect(provider);
+        } else if (err.code === 'auth/unauthorized-domain') {
+          alert('Add your domain in Firebase Auth → Settings → Authorized domains.');
         } else {
-          currentUsername = usnap.val();
+          alert('Login failed: ' + (err.message || err.code));
         }
       }
-    } else {
-      userEmail.textContent = "Not signed in";
-      loginBtn.style.display = "inline";
-      logoutBtn.style.display = "none";
-      uploadForm.style.display = "none";
+    }
+    if (e.target && e.target.id === 'logoutBtn') {
+      await auth.signOut();
     }
   });
 
-  document.getElementById("uploadBtn").onclick = () => {
-    const title = document.getElementById("title").value;
-    const desc = document.getElementById("desc").value;
-    const link = document.getElementById("link").value;
-    const file = document.getElementById("thumb").files[0];
+  function isOwner(user) {
+    return user && (user.email || '').toLowerCase() === OWNER_EMAIL;
+  }
+
+  function renderLoggedOut() {
+    authStatus.innerHTML = '<span class="muted">Not signed in</span> <button id="loginBtn">Login with Google</button>';
+    form.style.display = 'none';
+    updateDeleteButtons();
+  }
+  function renderLoggedIn(user) {
+    const name = isOwner(user) ? 'Official Beko Tweaks' : (currentUsername || user.displayName || 'User');
+    authStatus.innerHTML = '<span>Hello, ' + name + '</span> <button id="logoutBtn">Logout</button>';
+    form.style.display = 'block';
+    updateDeleteButtons();
+  }
+
+  // ---- Username handling for non-owner ----
+  async function ensureUsername(user) {
+    if (isOwner(user)) {
+      currentUsername = 'Official Beko Tweaks';
+      return;
+    }
+    const ref = db.ref('users/' + user.uid + '/username');
+    const snap = await ref.get();
+    if (snap.exists()) {
+      currentUsername = snap.val();
+      return;
+    }
+    // Prompt once to set username
+    let uname = '';
+    while (!uname) {
+      uname = prompt('Choose a username to display on your posts:', user.displayName || '');
+      if (uname === null) break; // user cancelled
+      uname = uname.trim();
+      if (uname.length > 24) {
+        alert('Username too long (max 24 characters).');
+        uname = '';
+      }
+    }
+    if (uname) {
+      await ref.set(uname);
+      currentUsername = uname;
+    } else {
+      currentUsername = user.displayName || 'User';
+    }
+  }
+
+  auth.onAuthStateChanged(async (user) => {
+    currentUser = user;
+    if (user) {
+      currentUID = user.uid;
+      await ensureUsername(user);
+      renderLoggedIn(user);
+    } else {
+      currentUID = null;
+      currentUsername = null;
+      renderLoggedOut();
+    }
+  });
+
+  // ---- Create Post ----
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const title = document.getElementById('title').value.trim();
+    const desc = document.getElementById('desc').value.trim();
+    const link = document.getElementById('link').value.trim();
+    const file = document.getElementById('thumb').files[0];
+    if (!auth.currentUser) { alert('Please login to upload.'); return; }
     const reader = new FileReader();
-    reader.onload = () => {
-      const postRef = db.ref("posts").push();
-      postRef.set({
-        uid: currentUser.uid,
-        email: currentUser.email,
-        author: currentUser.email === ownerEmail ? "Official Beko Tweaks" : currentUsername,
-        verified: currentUser.email === ownerEmail,
+    reader.onload = function(ev) {
+      const postRef = db.ref('posts').push();
+      const isOfficial = isOwner(auth.currentUser);
+      const authorName = isOfficial ? 'Official Beko Tweaks' : (currentUsername || auth.currentUser.displayName || 'User');
+      const postData = {
         title, desc, link,
-        thumb: reader.result,
-        id: postRef.key
-      });
+        thumb: ev.target.result,
+        uid: auth.currentUser.uid,
+        email: (auth.currentUser.email || '').toLowerCase(),
+        authorName: authorName,
+        isOfficial: isOfficial,
+        createdAt: Date.now(),
+        userPostId: postRef.key
+      };
+      postRef.set(postData);
+      form.reset();
     };
     reader.readAsDataURL(file);
-  };
-
-  db.ref("posts").on("child_added", snap => {
-    const post = snap.val();
-    const div = document.createElement("div");
-    div.className = "post";
-    div.innerHTML = `
-      <img src="${post.thumb}">
-      <h2>${post.title}</h2>
-      <p>${post.desc}</p>
-      <p><a href="${post.link}" target="_blank">View Download</a></p>
-      <p class="author">Uploaded by ${post.author}${post.verified ? '<span class="verified">✔</span>' : ''}</p>
-      <button class="delete" style="display:none;">Delete</button>
-    `;
-    const delBtn = div.querySelector(".delete");
-    if (currentUser && (post.uid === currentUser.uid || currentUser.email === ownerEmail)) {
-      delBtn.style.display = "inline";
-      delBtn.onclick = () => db.ref("posts/" + post.id).remove();
-    }
-    postsDiv.prepend(div);
   });
 
-  db.ref("posts").on("child_removed", snap => {
-    const el = document.getElementById(snap.key);
+  // ---- Render helpers ----
+  function verifiedBadgeSVG() {
+    return '<span class="yt-badge" title="Verified"><svg viewBox="0 0 24 24"><path d="M9 16.2l-3.5-3.5 1.4-1.4L9 13.4l7.1-7.1 1.4 1.4z"></path></svg></span>';
+  }
+
+  function createPostElement(post) {
+    const div = document.createElement('div');
+    div.className = 'post';
+    div.id = post.userPostId;
+    div.dataset.uid = post.uid || '';
+    const byline = post.isOfficial
+      ? `<span class="badge">Uploaded by ${post.authorName} ${verifiedBadgeSVG()}</span>`
+      : `<span class="badge">Uploaded by ${post.authorName}</span>`;
+    div.innerHTML = `
+      <img src="${post.thumb}" alt="">
+      <div class="post-content">
+        <h3>${post.title}</h3>
+        <small>${byline} • ${new Date(post.createdAt || Date.now()).toLocaleString()}</small>
+        <p>${post.desc}</p>
+        <a href="${post.link}" target="_blank">Download Now</a>
+      </div>
+      <button class="delete-btn">Delete</button>
+    `;
+    const btn = div.querySelector('.delete-btn');
+    btn.addEventListener('click', function() {
+      if (!auth.currentUser) return alert('Login first.');
+      if (isOwner(auth.currentUser) || auth.currentUser.uid === post.uid) {
+        db.ref('posts/' + post.userPostId).remove();
+      } else {
+        alert('You can only delete your own post.');
+      }
+    });
+    maybeShowDeleteForCard(div, post);
+    return div;
+  }
+
+  function maybeShowDeleteForCard(card, post) {
+    if (auth.currentUser && (isOwner(auth.currentUser) || auth.currentUser.uid === (post ? post.uid : card.dataset.uid))) {
+      card.classList.add('show-delete');
+    } else {
+      card.classList.remove('show-delete');
+    }
+  }
+
+  function updateDeleteButtons() {
+    postElems.forEach((el, id) => {
+      const post = el._postData;
+      maybeShowDeleteForCard(el, post);
+    });
+  }
+
+  // ---- Realtime listeners ----
+  db.ref('posts').on('child_added', function(snap) {
+    const post = snap.val();
+    const el = createPostElement(post);
+    el._postData = post;
+    postsContainer.prepend(el);
+    postElems.set(post.userPostId, el);
+  });
+
+  db.ref('posts').on('child_removed', function(snap) {
+    const id = snap.key;
+    const el = document.getElementById(id);
     if (el) el.remove();
+    postElems.delete(id);
+  });
+
+  // ---- Search ----
+  searchInput.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    postElems.forEach((el) => {
+      const text = el.innerText.toLowerCase();
+      el.style.display = text.includes(q) ? '' : 'none';
+    });
   });
 </script>
+
 </body>
-</html>""")
-
-# Create the ZIP
-zip_path = "/mnt/data/BekoBlog_OG_Rebuild.zip"
-with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-    zipf.write(index_file, arcname="index.html")
-
-zip_path
-
+</html>

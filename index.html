@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Beko Tweaks Blog</title>
+  <title>Beko Tweaks Blog (Login Debug)</title>
   <!-- Firebase compat SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
@@ -28,6 +28,7 @@
     .delete-btn { position: absolute; top: 0; right: 0; background: red; color: white; border: none; padding: 4px 8px; border-radius: 0 0 0 5px; cursor: pointer; display: none; }
     .show-delete .delete-btn { display: block; }
     footer { text-align: center; margin-top: 40px; color: gray; padding-bottom: 30px; }
+    .debug { background: #fff3cd; color: #856404; padding: 10px; border: 1px solid #ffeeba; border-radius: 6px; margin: 10px 20px; font-size: 0.9em; }
   </style>
 </head>
 <body>
@@ -36,9 +37,17 @@
   <input type="text" id="searchInput" placeholder="Search">
   <div id="authStatus">
     <span class="muted">Not signed in</span>
-    <button id="loginBtn">Login with Google</button>
+    <button id="loginBtn" onclick="login()">Login with Google</button>
   </div>
 </header>
+
+<div class="debug" id="debugBox">
+  <strong>Debug:</strong>
+  <div id="dbg-sdk">SDK: loading...</div>
+  <div id="dbg-auth">Auth state: unknown</div>
+  <div id="dbg-click">Login clicks: 0</div>
+  <div id="dbg-last">Last event: n/a</div>
+</div>
 
 <main>
   <h2>RECENT POSTS</h2>
@@ -59,6 +68,10 @@
 </footer>
 
 <script>
+  // ---- Debug helpers ----
+  const dbg = (id, msg) => { const el = document.getElementById(id); if (el) el.textContent = msg; console.log(id + ':', msg); };
+  let clickCount = 0;
+
   // ---- Firebase Config ----
   const firebaseConfig = {
     apiKey: "AIzaSyC0ni4C6RjqhhOvaC_SM0TeKkxoRUy7Yr0",
@@ -70,10 +83,13 @@
     appId: "1:575803781932:web:bb1580c563afb9aebd3289",
     measurementId: "G-K57W25QZBM"
   };
+  dbg('dbg-sdk', 'SDK loaded: ' + (!!window.firebase));
+
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const auth = firebase.auth();
   const provider = new firebase.auth.GoogleAuthProvider();
+  auth.useDeviceLanguage();
 
   // ---- UI refs ----
   const postsContainer = document.getElementById('posts');
@@ -84,26 +100,41 @@
   let currentUID = null;
   const postElems = new Map(); // postId -> element
 
-  // ---- Auth ----
-  function renderLoggedOut() {
-    authStatus.innerHTML = '<span class="muted">Not signed in</span> <button id="loginBtn">Login with Google</button>';
-    document.getElementById('loginBtn').onclick = () => auth.signInWithPopup(provider);
-    form.style.display = 'none';
-    updateDeleteButtons();
+  // ---- Login function (global for inline onclick) ----
+  async function login() {
+    clickCount++;
+    dbg('dbg-click', 'Login clicks: ' + clickCount);
+    try {
+      dbg('dbg-last', 'Attempting popup sign-in...');
+      await auth.signInWithPopup(provider);
+      dbg('dbg-last', 'Popup sign-in success');
+    } catch (err) {
+      console.error('Login error:', err);
+      dbg('dbg-last', 'Popup failed: ' + (err.code || err.message));
+      if (err.code === 'auth/popup-blocked') {
+        dbg('dbg-last', 'Popup blocked — trying redirect...');
+        await auth.signInWithRedirect(provider);
+      } else if (err.code === 'auth/unauthorized-domain') {
+        alert('Your domain must be in Firebase Auth → Settings → Authorized domains.');
+      } else {
+        alert('Login failed: ' + (err.message || err.code));
+      }
+    }
   }
-  function renderLoggedIn(user) {
-    authStatus.innerHTML = '<span>Hello, ' + (user.displayName || 'User') + '</span> <button id="logoutBtn">Logout</button>';
-    document.getElementById('logoutBtn').onclick = () => auth.signOut();
-    form.style.display = 'block';
-    updateDeleteButtons();
-  }
+
+  // ---- Auth state ----
   auth.onAuthStateChanged(user => {
     if (user) {
       currentUID = user.uid;
-      renderLoggedIn(user);
+      authStatus.innerHTML = '<span>Hello, ' + (user.displayName || 'User') + '</span> <button id="logoutBtn">Logout</button>';
+      document.getElementById('logoutBtn').onclick = () => auth.signOut();
+      form.style.display = 'block';
+      dbg('dbg-auth', 'Signed in as ' + (user.email || user.uid));
     } else {
       currentUID = null;
-      renderLoggedOut();
+      authStatus.innerHTML = '<span class="muted">Not signed in</span> <button id="loginBtn" onclick="login()">Login with Google</button>';
+      form.style.display = 'none';
+      dbg('dbg-auth', 'Signed out');
     }
   });
 
@@ -138,16 +169,16 @@
     div.className = 'post';
     div.id = post.userPostId;
     div.dataset.uid = post.uid || '';
-    div.innerHTML = \`
-      <img src="\${post.thumb}" alt="">
+    div.innerHTML = `
+      <img src="${post.thumb}" alt="">
       <div class="post-content">
-        <h3>\${post.title}</h3>
-        <small>Uploaded by \${post.displayName || 'User'} • \${new Date(post.createdAt || Date.now()).toLocaleString()}</small>
-        <p>\${post.desc}</p>
-        <a href="\${post.link}" target="_blank">Download Now</a>
+        <h3>${post.title}</h3>
+        <small>Uploaded by ${post.displayName || 'User'} • ${new Date(post.createdAt || Date.now()).toLocaleString()}</small>
+        <p>${post.desc}</p>
+        <a href="${post.link}" target="_blank">Download Now</a>
       </div>
       <button class="delete-btn">Delete</button>
-    \`;
+    `;
     const btn = div.querySelector('.delete-btn');
     btn.addEventListener('click', function() {
       const uid = div.dataset.uid;
@@ -196,6 +227,10 @@
       el.style.display = text.includes(q) ? '' : 'none';
     });
   });
+
+  // Initial debug state
+  dbg('dbg-sdk', 'SDK loaded: ' + (!!window.firebase));
+  dbg('dbg-last', 'Ready.');
 </script>
 
 </body>

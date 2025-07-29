@@ -5,12 +5,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Beko Tweaks Blog</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #fff; color: #111; }
-    header { padding: 20px; text-align: right; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
-    header input { padding: 8px 12px; border: 1px solid #ccc; border-radius: 20px; }
+    header { padding: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+    #searchInput { padding: 8px 12px; border: 1px solid #ccc; border-radius: 20px; }
+    #authStatus button { padding: 8px 12px; border: none; border-radius: 5px; background: deeppink; color: white; cursor: pointer; }
     main { padding: 20px 30px; max-width: 800px; margin: auto; }
     h2 { border-bottom: 2px solid deeppink; display: inline-block; padding-bottom: 4px; margin-bottom: 20px; }
     .post { display: flex; margin-bottom: 20px; gap: 20px; position: relative; }
@@ -19,6 +21,7 @@
     .post-content h3 { margin: 0 0 5px; }
     .post-content small { color: gray; }
     .delete-btn { position: absolute; top: 0; right: 0; background: red; color: white; border: none; padding: 4px 8px; border-radius: 0 0 0 5px; cursor: pointer; display: none; }
+    .show-delete .delete-btn { display: block; }
     footer { text-align: center; margin-top: 40px; color: gray; }
     form { margin: 20px 0; padding: 20px; background: #f9f9f9; border-radius: 10px; border: 1px solid #ddd; }
     form input, form textarea { width: 100%; margin-bottom: 10px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
@@ -29,11 +32,14 @@
 
 <header>
   <input type="text" id="searchInput" placeholder="Search">
+  <div id="authStatus">
+    <button id="loginBtn">Login with Google</button>
+  </div>
 </header>
 
 <main>
   <h2>RECENT POSTS</h2>
-  <form id="blogForm">
+  <form id="blogForm" style="display:none;">
     <input type="text" id="title" placeholder="Blog Title" required>
     <textarea id="desc" placeholder="Short Description" required></textarea>
     <input type="url" id="link" placeholder="Download/Redirect Link" required>
@@ -48,10 +54,7 @@
   Made by Beko Tweaks © 2025
 </footer>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-  import { getDatabase, ref, push, onChildAdded, remove, onChildRemoved } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
-
+<script>
   const firebaseConfig = {
     apiKey: "AIzaSyC0ni4C6RjqhhOvaC_SM0TeKkxoRUy7Yr0",
     authDomain: "bekotweaksblog.firebaseapp.com",
@@ -63,11 +66,35 @@
     measurementId: "G-K57W25QZBM"
   };
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const auth = firebase.auth();
+  const provider = new firebase.auth.GoogleAuthProvider();
 
-  const postsContainer = document.getElementById('posts');
+  const loginBtn = document.getElementById('loginBtn');
+  const authStatus = document.getElementById('authStatus');
   const form = document.getElementById('blogForm');
+  const postsContainer = document.getElementById('posts');
+
+  let currentUID = null;
+
+  loginBtn.addEventListener('click', () => {
+    auth.signInWithPopup(provider);
+  });
+
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUID = user.uid;
+      authStatus.innerHTML = \`<span>Hello, \${user.displayName}</span> <button id="logoutBtn">Logout</button>\`;
+      document.getElementById('logoutBtn').onclick = () => auth.signOut();
+      form.style.display = "block";
+    } else {
+      currentUID = null;
+      authStatus.innerHTML = '<button id="loginBtn">Login with Google</button>';
+      document.getElementById('loginBtn').onclick = () => auth.signInWithPopup(provider);
+      form.style.display = "none";
+    }
+  });
 
   form.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -78,12 +105,11 @@
     const reader = new FileReader();
     reader.onload = function(event) {
       const imgSrc = event.target.result;
-      const newPostRef = push(ref(db, 'posts/'));
+      const newPostRef = db.ref('posts').push();
       newPostRef.set({
-        title: title,
-        desc: desc,
-        link: link,
+        title, desc, link,
         thumb: imgSrc,
+        uid: currentUID,
         userPostId: newPostRef.key
       });
       form.reset();
@@ -91,31 +117,34 @@
     reader.readAsDataURL(thumbFile);
   });
 
-  onChildAdded(ref(db, 'posts/'), (data) => {
+  db.ref('posts').on('child_added', function(data) {
     const post = data.val();
     const postDiv = document.createElement('div');
     postDiv.className = 'post';
     postDiv.id = post.userPostId;
-    postDiv.innerHTML = `
-      <img src="${post.thumb}" alt="">
+    postDiv.innerHTML = \`
+      <img src="\${post.thumb}" alt="">
       <div class="post-content">
-        <h3>${post.title}</h3>
+        <h3>\${post.title}</h3>
         <small>USER · UPLOADED</small>
-        <p>${post.desc}</p>
-        <a href="${post.link}" target="_blank">Download Now</a>
+        <p>\${post.desc}</p>
+        <a href="\${post.link}" target="_blank">Download Now</a>
       </div>
       <button class="delete-btn">Delete</button>
-    `;
-    postDiv.querySelector('.delete-btn').addEventListener('click', function() {
-      remove(ref(db, 'posts/' + post.userPostId));
-    });
+    \`;
+    const deleteBtn = postDiv.querySelector('.delete-btn');
+    if (currentUID && currentUID === post.uid) {
+      postDiv.classList.add("show-delete");
+      deleteBtn.addEventListener('click', function() {
+        db.ref('posts/' + post.userPostId).remove();
+      });
+    }
     postsContainer.appendChild(postDiv);
   });
 
-  onChildRemoved(ref(db, 'posts/'), (data) => {
-    const removedPostId = data.key;
-    const postElem = document.getElementById(removedPostId);
-    if(postElem) postElem.remove();
+  db.ref('posts').on('child_removed', function(data) {
+    const postElem = document.getElementById(data.key);
+    if (postElem) postElem.remove();
   });
 
   document.getElementById('searchInput').addEventListener('input', function() {

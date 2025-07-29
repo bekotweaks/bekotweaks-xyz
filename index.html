@@ -1,31 +1,33 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Beko Tweaks Blog</title>
+  <!-- Firebase compat SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #fff; color: #111; }
-    header { padding: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+    header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
     #searchInput { padding: 8px 12px; border: 1px solid #ccc; border-radius: 20px; }
-    #authStatus button { padding: 8px 12px; border: none; border-radius: 5px; background: deeppink; color: white; cursor: pointer; }
-    main { padding: 20px 30px; max-width: 800px; margin: auto; }
+    #authStatus { display: flex; gap: 8px; align-items: center; }
+    #authStatus button { padding: 8px 12px; border: none; border-radius: 6px; background: deeppink; color: white; cursor: pointer; }
+    #authStatus .muted { color: #666; font-size: 0.9em; }
+    main { padding: 20px 30px; max-width: 860px; margin: auto; }
     h2 { border-bottom: 2px solid deeppink; display: inline-block; padding-bottom: 4px; margin-bottom: 20px; }
-    .post { display: flex; margin-bottom: 20px; gap: 20px; position: relative; }
-    .post img { width: 150px; height: 100px; object-fit: cover; border-radius: 8px; background: #eee; }
-    .post-content { flex: 1; }
-    .post-content h3 { margin: 0 0 5px; }
-    .post-content small { color: gray; }
-    .delete-btn { position: absolute; top: 0; right: 0; background: red; color: white; border: none; padding: 4px 8px; border-radius: 0 0 0 5px; cursor: pointer; display: none; }
-    .show-delete .delete-btn { display: block; }
-    footer { text-align: center; margin-top: 40px; color: gray; }
-    form { margin: 20px 0; padding: 20px; background: #f9f9f9; border-radius: 10px; border: 1px solid #ddd; }
+    form { margin: 20px 0; padding: 20px; background: #f9f9f9; border-radius: 10px; border: 1px solid #ddd; display: none; }
     form input, form textarea { width: 100%; margin-bottom: 10px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
     form button { padding: 10px 20px; background: deeppink; border: none; color: #fff; border-radius: 5px; cursor: pointer; }
+    .post { display: flex; gap: 20px; position: relative; padding: 12px 0; border-bottom: 1px solid #eee; }
+    .post img { width: 150px; height: 100px; object-fit: cover; border-radius: 8px; background: #eee; }
+    .post-content { flex: 1; }
+    .post-content h3 { margin: 0 0 6px; }
+    .post-content small { color: gray; display: block; margin-bottom: 6px; }
+    .delete-btn { position: absolute; top: 0; right: 0; background: red; color: white; border: none; padding: 4px 8px; border-radius: 0 0 0 5px; cursor: pointer; display: none; }
+    .show-delete .delete-btn { display: block; }
+    footer { text-align: center; margin-top: 40px; color: gray; padding-bottom: 30px; }
   </style>
 </head>
 <body>
@@ -33,12 +35,15 @@
 <header>
   <input type="text" id="searchInput" placeholder="Search">
   <div id="authStatus">
+    <span class="muted">Not signed in</span>
+    <button id="loginBtn">Login with Google</button>
   </div>
 </header>
 
 <main>
   <h2>RECENT POSTS</h2>
-  <form id="blogForm" style="display:none;">
+
+  <form id="blogForm">
     <input type="text" id="title" placeholder="Blog Title" required>
     <textarea id="desc" placeholder="Short Description" required></textarea>
     <input type="url" id="link" placeholder="Download/Redirect Link" required>
@@ -54,6 +59,7 @@
 </footer>
 
 <script>
+  // ---- Firebase Config ----
   const firebaseConfig = {
     apiKey: "AIzaSyC0ni4C6RjqhhOvaC_SM0TeKkxoRUy7Yr0",
     authDomain: "bekotweaksblog.firebaseapp.com",
@@ -64,94 +70,130 @@
     appId: "1:575803781932:web:bb1580c563afb9aebd3289",
     measurementId: "G-K57W25QZBM"
   };
-
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const auth = firebase.auth();
   const provider = new firebase.auth.GoogleAuthProvider();
 
-  const loginBtn = document.getElementById('loginBtn');
-  const authStatus = document.getElementById('authStatus');
-  const form = document.getElementById('blogForm');
+  // ---- UI refs ----
   const postsContainer = document.getElementById('posts');
+  const form = document.getElementById('blogForm');
+  const authStatus = document.getElementById('authStatus');
+  const searchInput = document.getElementById('searchInput');
 
   let currentUID = null;
+  const postElems = new Map(); // postId -> element
 
-  loginBtn.addEventListener('click', () => {
-    auth.signInWithPopup(provider);
-  });
-
+  // ---- Auth ----
+  function renderLoggedOut() {
+    authStatus.innerHTML = '<span class="muted">Not signed in</span> <button id="loginBtn">Login with Google</button>';
+    document.getElementById('loginBtn').onclick = () => auth.signInWithPopup(provider);
+    form.style.display = 'none';
+    updateDeleteButtons();
+  }
+  function renderLoggedIn(user) {
+    authStatus.innerHTML = '<span>Hello, ' + (user.displayName || 'User') + '</span> <button id="logoutBtn">Logout</button>';
+    document.getElementById('logoutBtn').onclick = () => auth.signOut();
+    form.style.display = 'block';
+    updateDeleteButtons();
+  }
   auth.onAuthStateChanged(user => {
     if (user) {
       currentUID = user.uid;
-      authStatus.innerHTML = \`<span>Hello, \${user.displayName}</span> <button id="logoutBtn">Logout</button>\`;
-      document.getElementById('logoutBtn').onclick = () => auth.signOut();
-      form.style.display = "block";
+      renderLoggedIn(user);
     } else {
       currentUID = null;
-      authStatus.innerHTML = '<button id="loginBtn">Login with Google</button>';
-      document.getElementById('loginBtn').onclick = () => auth.signInWithPopup(provider);
-      form.style.display = "none";
+      renderLoggedOut();
     }
   });
 
+  // ---- Create Post ----
   form.addEventListener('submit', function(e) {
     e.preventDefault();
-    const title = document.getElementById('title').value;
-    const desc = document.getElementById('desc').value;
-    const link = document.getElementById('link').value;
-    const thumbFile = document.getElementById('thumb').files[0];
+    const title = document.getElementById('title').value.trim();
+    const desc = document.getElementById('desc').value.trim();
+    const link = document.getElementById('link').value.trim();
+    const file = document.getElementById('thumb').files[0];
+    if (!auth.currentUser) { alert('Please login to upload.'); return; }
     const reader = new FileReader();
-    reader.onload = function(event) {
-      const imgSrc = event.target.result;
-      const newPostRef = db.ref('posts').push();
-      newPostRef.set({
+    reader.onload = function(ev) {
+      const postRef = db.ref('posts').push();
+      const postData = {
         title, desc, link,
-        thumb: imgSrc,
-        uid: currentUID,
-        userPostId: newPostRef.key
-      });
+        thumb: ev.target.result,
+        uid: auth.currentUser.uid,
+        displayName: auth.currentUser.displayName || 'User',
+        createdAt: Date.now(),
+        userPostId: postRef.key
+      };
+      postRef.set(postData);
       form.reset();
     };
-    reader.readAsDataURL(thumbFile);
+    reader.readAsDataURL(file);
   });
 
-  db.ref('posts').on('child_added', function(data) {
-    const post = data.val();
-    const postDiv = document.createElement('div');
-    postDiv.className = 'post';
-    postDiv.id = post.userPostId;
-    postDiv.innerHTML = \`
+  // ---- Render helpers ----
+  function createPostElement(post) {
+    const div = document.createElement('div');
+    div.className = 'post';
+    div.id = post.userPostId;
+    div.dataset.uid = post.uid || '';
+    div.innerHTML = \`
       <img src="\${post.thumb}" alt="">
       <div class="post-content">
         <h3>\${post.title}</h3>
-        <small>USER · UPLOADED</small>
+        <small>Uploaded by \${post.displayName || 'User'} • \${new Date(post.createdAt || Date.now()).toLocaleString()}</small>
         <p>\${post.desc}</p>
         <a href="\${post.link}" target="_blank">Download Now</a>
       </div>
       <button class="delete-btn">Delete</button>
     \`;
-    const deleteBtn = postDiv.querySelector('.delete-btn');
-    if (currentUID && currentUID === post.uid) {
-      postDiv.classList.add("show-delete");
-      deleteBtn.addEventListener('click', function() {
+    const btn = div.querySelector('.delete-btn');
+    btn.addEventListener('click', function() {
+      const uid = div.dataset.uid;
+      if (auth.currentUser && auth.currentUser.uid === uid) {
         db.ref('posts/' + post.userPostId).remove();
-      });
+      } else {
+        alert('You can only delete your own post.');
+      }
+    });
+    maybeShowDeleteForCard(div);
+    return div;
+  }
+
+  function maybeShowDeleteForCard(card) {
+    if (currentUID && card.dataset.uid === currentUID) {
+      card.classList.add('show-delete');
+    } else {
+      card.classList.remove('show-delete');
     }
-    postsContainer.appendChild(postDiv);
+  }
+
+  function updateDeleteButtons() {
+    postElems.forEach((el) => maybeShowDeleteForCard(el));
+  }
+
+  // ---- Realtime listeners ----
+  db.ref('posts').on('child_added', function(snap) {
+    const post = snap.val();
+    const el = createPostElement(post);
+    postsContainer.prepend(el);
+    postElems.set(post.userPostId, el);
   });
 
-  db.ref('posts').on('child_removed', function(data) {
-    const postElem = document.getElementById(data.key);
-    if (postElem) postElem.remove();
+  db.ref('posts').on('child_removed', function(snap) {
+    const id = snap.key;
+    const el = document.getElementById(id);
+    if (el) el.remove();
+    postElems.delete(id);
   });
 
-  document.getElementById('searchInput').addEventListener('input', function() {
-    const filter = this.value.toLowerCase();
-    const posts = document.querySelectorAll('.post');
-    posts.forEach(post => {
-      const text = post.innerText.toLowerCase();
-      post.style.display = text.includes(filter) ? '' : 'none';
+  // ---- Search ----
+  searchInput.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    postElems.forEach((el) => {
+      const text = el.innerText.toLowerCase();
+      el.style.display = text.includes(q) ? '' : 'none';
     });
   });
 </script>

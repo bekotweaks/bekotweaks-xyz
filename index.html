@@ -5,8 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Beko Tweaks Blog</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #fff; color: #111; }
     header { padding: 20px; text-align: right; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
@@ -48,10 +48,7 @@
   Made by Beko Tweaks © 2025
 </footer>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-  import { getDatabase, ref, push, onChildAdded, remove, onChildRemoved } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
-
+<script>
   const firebaseConfig = {
     apiKey: "AIzaSyC0ni4C6RjqhhOvaC_SM0TeKkxoRUy7Yr0",
     authDomain: "bekotweaksblog.firebaseapp.com",
@@ -63,8 +60,8 @@
     measurementId: "G-K57W25QZBM"
   };
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
   const postsContainer = document.getElementById('posts');
   const form = document.getElementById('blogForm');
@@ -78,7 +75,7 @@
     const reader = new FileReader();
     reader.onload = function(event) {
       const imgSrc = event.target.result;
-      const newPostRef = push(ref(db, 'posts/'));
+      const newPostRef = db.ref('posts').push();
       newPostRef.set({
         title: title,
         desc: desc,
@@ -91,7 +88,7 @@
     reader.readAsDataURL(thumbFile);
   });
 
-  onChildAdded(ref(db, 'posts/'), (data) => {
+  db.ref('posts').on('child_added', function(data) {
     const post = data.val();
     const postDiv = document.createElement('div');
     postDiv.className = 'post';
@@ -107,15 +104,14 @@
       <button class="delete-btn">Delete</button>
     `;
     postDiv.querySelector('.delete-btn').addEventListener('click', function() {
-      remove(ref(db, 'posts/' + post.userPostId));
+      db.ref('posts/' + post.userPostId).remove();
     });
     postsContainer.appendChild(postDiv);
   });
 
-  onChildRemoved(ref(db, 'posts/'), (data) => {
-    const removedPostId = data.key;
-    const postElem = document.getElementById(removedPostId);
-    if(postElem) postElem.remove();
+  db.ref('posts').on('child_removed', function(data) {
+    const postElem = document.getElementById(data.key);
+    if (postElem) postElem.remove();
   });
 
   document.getElementById('searchInput').addEventListener('input', function() {
